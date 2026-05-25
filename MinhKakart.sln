@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiDecoration", "DiDecoratio
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiDecoration.Tests", "DiDecoration.Tests\DiDecoration.Tests.csproj", "{D150CD1C-C459-4845-B810-D1023F89BAD6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiDecoration.Analyzers", "DiDecoration.Analyzers\DiDecoration.Analyzers.csproj", "{0166FFB0-2C97-4EE3-BD9A-CBBA84515868}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{D150CD1C-C459-4845-B810-D1023F89BAD6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D150CD1C-C459-4845-B810-D1023F89BAD6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D150CD1C-C459-4845-B810-D1023F89BAD6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0166FFB0-2C97-4EE3-BD9A-CBBA84515868}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0166FFB0-2C97-4EE3-BD9A-CBBA84515868}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0166FFB0-2C97-4EE3-BD9A-CBBA84515868}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0166FFB0-2C97-4EE3-BD9A-CBBA84515868}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

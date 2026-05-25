@@ -60,3 +60,38 @@ public sealed class MyOptions
 - `RegisterOptions` binds each `[Option]` class from the configuration section named by its key.
 - `DecorationScanOptions` can filter by namespace prefix, predicate, and internal-type visibility.
 
+## Diagnostics
+
+Use `DecorationDiagnostics` when you want to inspect a scan before registering services:
+
+```csharp
+using DiDecoration.Utils;
+
+var diagnostics = DecorationDiagnostics.Analyze(typeof(MyService).Assembly);
+
+if (diagnostics.Any(item => item.Severity == DecorationDiagnosticSeverity.Error))
+{
+    throw new InvalidOperationException("Fix the reported issues before registering services.");
+}
+
+DecorationDiagnostics.Validate(typeof(MyService).Assembly);
+```
+
+### Common pitfalls
+
+- Hosted services must implement `IHostedService` and any `BackgroundServiceAttribute.ServiceType` must be an interface implemented by the worker.
+- Typed HTTP clients need a constructor that can accept `HttpClient`.
+- HTTP handler types must inherit from `DelegatingHandler`.
+- If you scan internal types, set `DecorationScanOptions.IncludeInternalTypes = true`.
+
+## Analyzer support
+
+The solution now includes `DiDecoration.Analyzers`, which provides compile-time feedback for invalid attribute usage:
+
+- `DDI001` — invalid service mappings
+- `DDI002` — invalid hosted-service usage
+- `DDI003` — invalid typed HTTP client usage
+- `DDI004` — invalid option attribute usage
+
+If you package this library for distribution, include the analyzer project as an analyzer asset so consumer projects get the same feedback in the IDE.
+
