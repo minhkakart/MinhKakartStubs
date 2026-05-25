@@ -20,78 +20,50 @@ public static class ServiceCollectionExtensions
     /// <param name="assembly">
     /// The <see cref="Assembly"/> to scan for services.
     /// </param>
-    public static IServiceCollection AddServices(this IServiceCollection services, Assembly? assembly = null)
+    public static IServiceCollection RegisterServices(this IServiceCollection services, Assembly? assembly = null)
     {
-        var serviceClasses = AppUtils.GetClassTypes(assembly)
-            .Where(t => t.GetCustomAttribute<ServiceAttribute>(true) is not null)
+        var serviceDescriptors = AppUtils.GetClassTypes(assembly)
+            .SelectMany(serviceClass =>
+                serviceClass.GetCustomAttributes<ServiceAttribute>(true)
+                    .SelectMany(serviceAttribute => CreateServiceDescriptors(serviceClass, serviceAttribute)))
             .ToImmutableList();
-        foreach (var serviceClass in serviceClasses)
+
+        foreach (var serviceDescriptor in serviceDescriptors)
         {
-            var serviceAttribute = serviceClass.GetCustomAttribute<ServiceAttribute>(true)!;
-            var serviceKey = serviceAttribute.Key;
-            var serviceLifetime = serviceAttribute.Lifetime;
-            var multiple = serviceAttribute.Multiple;
-
-            var registerType = GetServiceType(serviceClass);
-
-            if (multiple)
+            if (serviceDescriptor.Multiple)
             {
-                services.Add(new ServiceDescriptor(registerType, serviceKey, serviceClass, serviceLifetime));
+                services.Add(serviceDescriptor.Descriptor);
             }
             else
             {
-                services.TryAdd(new ServiceDescriptor(registerType, serviceKey, serviceClass, serviceLifetime));
+                services.TryAdd(serviceDescriptor.Descriptor);
             }
         }
 
         return services;
 
-        Type GetServiceType(Type serviceClass)
+        IEnumerable<(ServiceDescriptor Descriptor, bool Multiple)> CreateServiceDescriptors(Type serviceClass, ServiceAttribute serviceAttribute)
         {
-            var serviceAttribute = serviceClass.GetCustomAttribute<ServiceAttribute>(true)
-                                   ?? throw new InvalidOperationException($"Service class {serviceClass.FullName} is missing the required ServiceAttribute.");
-            var serviceLifetime = serviceAttribute.Lifetime;
+            var serviceTypes = serviceAttribute.ServiceTypes is { Length: > 0 }
+                ? serviceAttribute.ServiceTypes
+                : [serviceClass];
 
-            var declaredServiceType = serviceAttribute.ServiceType;
-            if (declaredServiceType != null && !declaredServiceType.IsAssignableFrom(serviceClass))
+            foreach (var serviceType in serviceTypes)
             {
-                throw new InvalidOperationException(
-                    $"Cannot register {serviceClass.FullName} as {declaredServiceType.FullName} because it does not implement the service type.");
-            }
-
-            var markedInterfaceType = GetFirstDirectInterface(serviceClass);
-            if (markedInterfaceType != null)
-            {
-                var interfaceAttribute = markedInterfaceType.GetCustomAttribute<ServiceAttribute>();
-                if (interfaceAttribute == null || interfaceAttribute.Lifetime != serviceLifetime)
+                if (serviceType is null)
                 {
-                    markedInterfaceType = null;
+                    throw new InvalidOperationException($"Service class {serviceClass.FullName} contains a null service type in ServiceAttribute.");
                 }
+
+                if (serviceType != serviceClass && !serviceType.IsAssignableFrom(serviceClass))
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot register {serviceClass.FullName} as {serviceType.FullName} because it does not implement the service type.");
+                }
+
+                yield return (new ServiceDescriptor(serviceType, serviceAttribute.Key, serviceClass, serviceAttribute.Lifetime), serviceAttribute.Multiple);
             }
-
-            var registerType = declaredServiceType
-                               ?? markedInterfaceType
-                               ?? serviceClass;
-
-            return registerType;
         }
-    }
-
-    private static Type? GetFirstDirectInterface(Type type)
-    {
-        var all = type.GetInterfaces();
-
-        var fromBase = type.BaseType?.GetInterfaces() ?? Type.EmptyTypes;
-
-        // Keep only interfaces introduced by this class so we don't accidentally register
-        // parent abstractions when a derived type implements a more specific contract.
-        var candidates = all.Except(fromBase).ToArray();
-
-        var directMostSpecific = candidates
-            .Where(i => !candidates.Any(other => other != i && i.IsAssignableFrom(other)))
-            .ToArray();
-
-        return directMostSpecific.FirstOrDefault();
     }
 
     /// <summary>
@@ -103,44 +75,96 @@ public static class ServiceCollectionExtensions
     /// <param name="assembly">
     /// The <see cref="Assembly"/> to scan for hosted services.
     /// </param>
-    public static IServiceCollection AddHostedServices(this IServiceCollection services, Assembly? assembly = null)
+    /// <remarks>
+    /// If <see cref="BackgroundServiceAttribute.ServiceType"/> is <c>null</c>, the hosted class is registered directly as <see cref="IHostedService"/>.
+    /// If <see cref="BackgroundServiceAttribute.ServiceType"/> is specified, it must be either the hosted class itself or an interface
+    /// implemented by that class. In that case, the service must already be registered before calling this method so it can be resolved
+    /// from the container.
+    ///
+    /// This method can be used together with <see cref="SingletonServiceAttribute"/>, but the registration order matters when
+    /// <see cref="BackgroundServiceAttribute.ServiceType"/> points to another service registration.
+    /// </remarks>
+    public static IServiceCollection RegisterHostedServices(this IServiceCollection services, Assembly? assembly = null)
     {
         var hostedServiceTypes = AppUtils.GetClassTypes(assembly)
-            .Where(t => t.GetCustomAttribute<BackgroundServiceAttribute>() is not null && typeof(IHostedService).IsAssignableFrom(t))
+            .Select(type => (HostType: type, Attribute: type.GetCustomAttribute<BackgroundServiceAttribute>()))
+            .Where(item => item.Attribute is not null && typeof(IHostedService).IsAssignableFrom(item.HostType))
             .ToImmutableList();
 
-        hostedServiceTypes.ForEach(hostedServiceType =>
+        hostedServiceTypes.ForEach(item =>
         {
-            services.TryAddSingleton<IHostedService>(sp =>
+            var hostedServiceType = item.HostType;
+            var backgroundServiceAttribute = item.Attribute!;
+            var serviceType = backgroundServiceAttribute.ServiceType;
+
+            if (serviceType is not null && serviceType != hostedServiceType && (!serviceType.IsInterface || !serviceType.IsAssignableFrom(hostedServiceType)))
             {
-                var singletonServiceAttribute = hostedServiceType.GetCustomAttribute<ServiceAttribute>(true);
-                if (singletonServiceAttribute is not null
-                    && singletonServiceAttribute.Lifetime != ServiceLifetime.Singleton
-                    && singletonServiceAttribute.ServiceType is not null)
+                throw new InvalidOperationException(
+                    $"Cannot register hosted service {hostedServiceType.FullName} because BackgroundServiceAttribute.ServiceType must be an interface implemented by the hosted service or the hosted service type itself.");
+            }
+
+            services.AddSingleton<IHostedService>(sp =>
+            {
+                var singletonServiceAttribute = hostedServiceType.GetCustomAttributes<ServiceAttribute>(true)
+                    .FirstOrDefault(attribute => attribute.Lifetime != ServiceLifetime.Singleton);
+                if (singletonServiceAttribute is not null)
                 {
                     throw new InvalidOperationException(
                         $"Cannot register hosted service {hostedServiceType.FullName} because it is marked with ServiceAttribute with lifetime {singletonServiceAttribute.Lifetime} instead of Singleton.");
                 }
 
-                return (IHostedService)(sp.GetService(hostedServiceType) ?? ActivatorUtilities.CreateInstance(sp, hostedServiceType));
+                if (serviceType is null)
+                {
+                    return (IHostedService)(sp.GetService(hostedServiceType) ?? ActivatorUtilities.CreateInstance(sp, hostedServiceType));
+                }
+
+                var service = sp.GetService(serviceType);
+                if (service is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot register hosted service {hostedServiceType.FullName} because service type {serviceType.FullName} is not registered. Register the service before calling RegisterHostedServices.");
+                }
+
+                if (service is not IHostedService hostedService)
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot register hosted service {hostedServiceType.FullName} because resolved service type {serviceType.FullName} does not implement {nameof(IHostedService)}.");
+                }
+
+                return hostedService;
             });
         });
 
         return services;
     }
 
-    public static IServiceCollection AddHttpClients(this IServiceCollection services, Assembly? assembly = null)
+    public static IServiceCollection RegisterHttpClients(this IServiceCollection services, Assembly? assembly = null)
     {
         var httpClientTypes = AppUtils.GetClassTypes(assembly)
             .Where(t => t.GetCustomAttribute<HttpClientServiceAttribute>() is not null)
             .ToImmutableList();
         httpClientTypes.ForEach(httpClientType =>
         {
+            if (services.Any(descriptor => descriptor.ServiceType == httpClientType))
+            {
+                return;
+            }
+
             var clientName = httpClientType.FullName ?? "default";
             var httpClientAttribute = httpClientType.GetCustomAttribute<HttpClientServiceAttribute>()!;
             services.AddHttpClient(clientName, client =>
                 {
-                    if (httpClientAttribute.BaseUrl != null) client.BaseAddress = new Uri(httpClientAttribute.BaseUrl);
+                    if (httpClientAttribute.BaseUrl is not null)
+                    {
+                        if (!Uri.TryCreate(httpClientAttribute.BaseUrl, UriKind.Absolute, out var baseUri))
+                        {
+                            throw new InvalidOperationException(
+                                $"Cannot register HTTP client {httpClientType.FullName} because BaseUrl must be an absolute URI.");
+                        }
+
+                        client.BaseAddress = baseUri;
+                    }
+
                     client.Timeout = TimeSpan.FromSeconds(httpClientAttribute.TimeoutSeconds);
                 })
                 .ConfigureAdditionalHttpMessageHandlers((handlers, sp) =>
@@ -169,7 +193,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddOptions(this IServiceCollection services, IConfiguration configuration, Assembly? assembly = null)
+    public static IServiceCollection RegisterOptions(this IServiceCollection services, IConfiguration configuration, Assembly? assembly = null)
     {
         var optionTypes = AppUtils.GetClassTypes(assembly)
             .Where(type => type.GetCustomAttributes(typeof(OptionAttribute), false).Length > 0);
