@@ -6,12 +6,19 @@ Attribute-driven helpers for registering services in `Microsoft.Extensions.Depen
 
 ```csharp
 using DiDecoration.Extensions;
+using DiDecoration.Utils;
 
 services
     .RegisterServices(typeof(MyService).Assembly)
     .RegisterHostedServices(typeof(MyWorker).Assembly)
     .RegisterHttpClients(typeof(CatalogClient).Assembly)
     .RegisterOptions(configuration, typeof(MyOptions).Assembly);
+
+services.RegisterDecorators(configuration, typeof(MyService).Assembly, new DecorationScanOptions
+{
+    NamespacePrefix = "MyApp.Features",
+    IncludeInternalTypes = false
+});
 ```
 
 ## Example attributes
@@ -28,7 +35,7 @@ public sealed class MyWorker : BackgroundService
     protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
 }
 
-[HttpClientService("https://api.example.com", 30)]
+[HttpClientService("https://api.example.com", 30, ClientName = "catalog-client", DefaultHeaders = new[] { "X-App=DiDecoration" })]
 public sealed class CatalogClient
 {
     public CatalogClient(HttpClient httpClient)
@@ -49,5 +56,7 @@ public sealed class MyOptions
 - Set `ServiceAttribute.Multiple = true` when you want additional implementations to remain in the collection.
 - `RegisterHostedServices` can resolve a hosted service directly or through another registered service type.
 - `RegisterHttpClients` validates base URLs and handler types before the client registration is added.
+- `HttpClientServiceAttribute` supports client-name overrides, default request headers, and an explicit handler pipeline.
 - `RegisterOptions` binds each `[Option]` class from the configuration section named by its key.
+- `DecorationScanOptions` can filter by namespace prefix, predicate, and internal-type visibility.
 

@@ -5,7 +5,8 @@ namespace DiDecoration.Attributes;
 /// The class must have a constructor that accepts an <see cref="HttpClient"/> parameter to be registered as an HTTP client service.
 /// The <see cref="HttpClientServiceAttribute"/> allows you to specify a base URL for the HTTP client, a timeout for requests, and any interceptors
 /// that should be applied to the HTTP client. Interceptors can be used to add custom logic before or after sending HTTP requests, such as logging,
-/// retry policies, or authentication. Invalid base URLs and interceptor types are rejected when registration runs so configuration errors fail fast.
+/// retry policies, or authentication. The attribute also supports a client-name override, default request headers, and an explicit handler pipeline.
+/// Invalid base URLs and handler types are rejected when registration runs so configuration errors fail fast.
 /// </summary>
 /// <param name="baseUrl">
 /// An optional base URL for the HTTP client. If specified, this URL must be an absolute URI and will be used as the base address for all requests made
@@ -32,6 +33,22 @@ public sealed class HttpClientServiceAttribute(string? baseUrl = null, int timeo
     public string? BaseUrl { get; } = baseUrl;
     public int TimeoutSeconds { get; } = timeoutSeconds;
     public Type[] Interceptors { get; } = interceptors;
+
+    /// <summary>
+    /// Gets or sets an optional client-name override used when creating the typed client.
+    /// </summary>
+    public string? ClientName { get; init; }
+
+    /// <summary>
+    /// Gets or sets header definitions to apply to the underlying <see cref="HttpClient"/>.
+    /// Use the format <c>Name=Value</c> for each entry.
+    /// </summary>
+    public string[] DefaultHeaders { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets an optional explicit handler pipeline. When specified, this collection takes precedence over <see cref="Interceptors"/>.
+    /// </summary>
+    public Type[]? Handlers { get; init; }
 }
 
 

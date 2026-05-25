@@ -12,6 +12,29 @@ namespace DiDecoration.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
+    /// Registers all decoration-based components from the supplied assembly using a single call.
+    /// </summary>
+    /// <param name="services">The service collection to configure.</param>
+    /// <param name="configuration">Optional configuration root used for option binding.</param>
+    /// <param name="assembly">The assembly to scan. When <c>null</c>, the current assembly is scanned.</param>
+    /// <param name="scanOptions">Optional scan filters that apply to all registrations.</param>
+    public static IServiceCollection RegisterDecorators(this IServiceCollection services, IConfiguration? configuration = null, Assembly? assembly = null, DecorationScanOptions? scanOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.RegisterServices(assembly, scanOptions);
+        services.RegisterHostedServices(assembly, scanOptions);
+        services.RegisterHttpClients(assembly, scanOptions);
+
+        if (configuration is not null)
+        {
+            services.RegisterOptions(configuration, assembly, scanOptions);
+        }
+
+        return services;
+    }
+
+    /// <summary>
     /// Automatically registers services marked with <see cref="ServiceAttribute"/> in the specified assembly.
     /// </summary>
     /// <param name="services">
@@ -19,6 +42,9 @@ public static class ServiceCollectionExtensions
     /// </param>
     /// <param name="assembly">
     /// The <see cref="Assembly"/> to scan for services. When <c>null</c>, the current assembly is scanned.
+    /// </param>
+    /// <param name="scanOptions">
+    /// Optional scan filters that narrow which classes are included.
     /// </param>
     /// <remarks>
     /// <para>
@@ -33,11 +59,11 @@ public static class ServiceCollectionExtensions
     /// </example>
     /// </para>
     /// </remarks>
-    public static IServiceCollection RegisterServices(this IServiceCollection services, Assembly? assembly = null)
+    public static IServiceCollection RegisterServices(this IServiceCollection services, Assembly? assembly = null, DecorationScanOptions? scanOptions = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var serviceDescriptors = AppUtils.GetClassTypes(assembly)
+        var serviceDescriptors = AppUtils.GetClassTypes(assembly, scanOptions)
             .SelectMany(serviceClass =>
                 serviceClass.GetCustomAttributes<ServiceAttribute>(true)
                     .SelectMany(serviceAttribute => CreateServiceDescriptors(serviceClass, serviceAttribute)))
@@ -70,7 +96,7 @@ public static class ServiceCollectionExtensions
                     throw new InvalidOperationException($"Service class {serviceClass.FullName} contains a null service type in ServiceAttribute.");
                 }
 
-                if (serviceType != serviceClass && !serviceType.IsAssignableFrom(serviceClass))
+                if (!IsValidServiceMapping(serviceClass, serviceType))
                 {
                     throw new InvalidOperationException(
                         $"Cannot register {serviceClass.FullName} as {serviceType.FullName} because it does not implement the service type.");
@@ -90,6 +116,9 @@ public static class ServiceCollectionExtensions
     /// <param name="assembly">
     /// The <see cref="Assembly"/> to scan for hosted services. When <c>null</c>, the current assembly is scanned.
     /// </param>
+    /// <param name="scanOptions">
+    /// Optional scan filters that narrow which classes are included.
+    /// </param>
     /// <remarks>
     /// <para>
     /// If <see cref="BackgroundServiceAttribute.ServiceType"/> is <c>null</c>, the hosted class is registered directly as <see cref="IHostedService"/>.
@@ -108,11 +137,11 @@ public static class ServiceCollectionExtensions
     /// </code>
     /// </example>
     /// </remarks>
-    public static IServiceCollection RegisterHostedServices(this IServiceCollection services, Assembly? assembly = null)
+    public static IServiceCollection RegisterHostedServices(this IServiceCollection services, Assembly? assembly = null, DecorationScanOptions? scanOptions = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var hostedServiceTypes = AppUtils.GetClassTypes(assembly)
+        var hostedServiceTypes = AppUtils.GetClassTypes(assembly, scanOptions)
             .Select(type => (HostType: type, Attribute: type.GetCustomAttribute<BackgroundServiceAttribute>()))
             .Where(item => item.Attribute is not null && typeof(IHostedService).IsAssignableFrom(item.HostType))
             .ToImmutableList();
@@ -173,6 +202,9 @@ public static class ServiceCollectionExtensions
     /// <param name="assembly">
     /// The <see cref="Assembly"/> to scan for clients. When <c>null</c>, the current assembly is scanned.
     /// </param>
+    /// <param name="scanOptions">
+    /// Optional scan filters that narrow which classes are included.
+    /// </param>
     /// <remarks>
     /// <para>
     /// Base URLs and handler types are validated before the client registration is added so configuration errors fail fast.
@@ -183,18 +215,23 @@ public static class ServiceCollectionExtensions
     /// </code>
     /// </example>
     /// </remarks>
-    public static IServiceCollection RegisterHttpClients(this IServiceCollection services, Assembly? assembly = null)
+    public static IServiceCollection RegisterHttpClients(this IServiceCollection services, Assembly? assembly = null, DecorationScanOptions? scanOptions = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var httpClientTypes = AppUtils.GetClassTypes(assembly)
+        var httpClientTypes = AppUtils.GetClassTypes(assembly, scanOptions)
             .Where(t => t.GetCustomAttribute<HttpClientServiceAttribute>() is not null)
             .ToImmutableList();
 
         httpClientTypes.ForEach(httpClientType =>
         {
-            var clientName = httpClientType.FullName ?? "default";
             var httpClientAttribute = httpClientType.GetCustomAttribute<HttpClientServiceAttribute>()!;
+            var clientName = httpClientAttribute.ClientName?.Trim();
+            if (string.IsNullOrWhiteSpace(clientName))
+            {
+                clientName = httpClientType.FullName ?? "default";
+            }
+
             Uri? baseUri = null;
             if (httpClientAttribute.BaseUrl is not null && !Uri.TryCreate(httpClientAttribute.BaseUrl, UriKind.Absolute, out baseUri))
             {
@@ -202,19 +239,34 @@ public static class ServiceCollectionExtensions
                     $"Cannot register HTTP client {httpClientType.FullName} because BaseUrl must be an absolute URI.");
             }
 
-            foreach (var interceptorType in httpClientAttribute.Interceptors)
+            var handlerTypes = (httpClientAttribute.Handlers is { Length: > 0 }
+                ? httpClientAttribute.Handlers
+                : httpClientAttribute.Interceptors).Cast<Type?>().ToList();
+
+            foreach (var header in httpClientAttribute.DefaultHeaders)
             {
-                if (!typeof(DelegatingHandler).IsAssignableFrom(interceptorType))
+                ValidateHeaderDefinition(header, httpClientType);
+            }
+
+            foreach (var handlerType in handlerTypes)
+            {
+                if (handlerType is null)
                 {
                     throw new InvalidOperationException(
-                        $"Cannot register interceptor {interceptorType.FullName} because it does not inherit from {nameof(DelegatingHandler)}.");
+                        $"Cannot register HTTP client {httpClientType.FullName} because a handler type is null.");
+                }
+
+                if (!typeof(DelegatingHandler).IsAssignableFrom(handlerType))
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot register handler {handlerType.FullName} because it does not inherit from {nameof(DelegatingHandler)}.");
                 }
             }
 
-                    if (services.Any(descriptor => descriptor.ServiceType == httpClientType))
-                    {
-                        return;
-                    }
+            if (services.Any(descriptor => descriptor.ServiceType == httpClientType))
+            {
+                return;
+            }
 
             services.AddHttpClient(clientName, client =>
                 {
@@ -223,14 +275,22 @@ public static class ServiceCollectionExtensions
                         client.BaseAddress = baseUri;
                     }
 
+                    ApplyDefaultHeaders(client, httpClientAttribute.DefaultHeaders, httpClientType);
                     client.Timeout = TimeSpan.FromSeconds(httpClientAttribute.TimeoutSeconds);
                 })
                 .ConfigureAdditionalHttpMessageHandlers((handlers, sp) =>
                 {
-                    foreach (var interceptorType in httpClientAttribute.Interceptors)
+                    foreach (var handlerType in handlerTypes)
                     {
-                        var interceptor = (DelegatingHandler)(sp.GetService(interceptorType) ?? ActivatorUtilities.CreateInstance(sp, interceptorType));
-                        handlers.Add(interceptor);
+                        if (handlerType is null)
+                        {
+                            throw new InvalidOperationException(
+                                $"Cannot register HTTP client {httpClientType.FullName} because a handler type is null.");
+                        }
+
+                        var resolvedHandlerType = handlerType;
+                        var handler = (DelegatingHandler)(sp.GetService(resolvedHandlerType) ?? ActivatorUtilities.CreateInstance(sp, resolvedHandlerType));
+                        handlers.Add(handler);
                     }
                 });
 
@@ -257,6 +317,9 @@ public static class ServiceCollectionExtensions
     /// <param name="assembly">
     /// The <see cref="Assembly"/> to scan for options. When <c>null</c>, the current assembly is scanned.
     /// </param>
+    /// <param name="scanOptions">
+    /// Optional scan filters that narrow which classes are included.
+    /// </param>
     /// <remarks>
     /// <example>
     /// <code>
@@ -264,12 +327,12 @@ public static class ServiceCollectionExtensions
     /// </code>
     /// </example>
     /// </remarks>
-    public static IServiceCollection RegisterOptions(this IServiceCollection services, IConfiguration configuration, Assembly? assembly = null)
+    public static IServiceCollection RegisterOptions(this IServiceCollection services, IConfiguration configuration, Assembly? assembly = null, DecorationScanOptions? scanOptions = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        var optionTypes = AppUtils.GetClassTypes(assembly)
+        var optionTypes = AppUtils.GetClassTypes(assembly, scanOptions)
             .Select(type => (Type: type, Attribute: type.GetCustomAttribute<OptionAttribute>(false)))
             .Where(item => item.Attribute is not null);
 
@@ -285,5 +348,64 @@ public static class ServiceCollectionExtensions
         }
 
         return services;
+    }
+
+    private static bool IsValidServiceMapping(Type serviceClass, Type serviceType)
+    {
+        if (serviceType == serviceClass)
+        {
+            return true;
+        }
+
+        if (serviceClass.IsGenericTypeDefinition || serviceType.IsGenericTypeDefinition)
+        {
+            if (!serviceClass.IsGenericTypeDefinition || !serviceType.IsGenericTypeDefinition)
+            {
+                return false;
+            }
+
+            return serviceClass.GetInterfaces()
+                .Any(interfaceType => interfaceType.IsGenericType && interfaceType.GetGenericTypeDefinition() == serviceType);
+        }
+
+        return serviceType.IsAssignableFrom(serviceClass);
+    }
+
+    private static void ValidateHeaderDefinition(string header, Type httpClientType)
+    {
+        var separatorIndex = header.IndexOf('=');
+        if (separatorIndex < 0)
+        {
+            separatorIndex = header.IndexOf(':');
+        }
+
+        if (separatorIndex <= 0 || separatorIndex == header.Length - 1)
+        {
+            throw new InvalidOperationException(
+                $"Cannot register HTTP client {httpClientType.FullName} because default header '{header}' must use the format Name=Value.");
+        }
+    }
+
+    private static void ApplyDefaultHeaders(HttpClient client, string[] defaultHeaders, Type httpClientType)
+    {
+        foreach (var header in defaultHeaders)
+        {
+            var separatorIndex = header.IndexOf('=');
+            if (separatorIndex < 0)
+            {
+                separatorIndex = header.IndexOf(':');
+            }
+
+            var name = header[..separatorIndex].Trim();
+            var value = header[(separatorIndex + 1)..].Trim();
+
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException(
+                    $"Cannot register HTTP client {httpClientType.FullName} because default header '{header}' must use the format Name=Value.");
+            }
+
+            client.DefaultRequestHeaders.TryAddWithoutValidation(name, value);
+        }
     }
 }
