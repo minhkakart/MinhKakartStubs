@@ -21,6 +21,26 @@ services.RegisterDecorators(configuration, typeof(MyService).Assembly, new Decor
 });
 ```
 
+## Source generation
+
+If you reference the separate `DiDecoration.Generators` project/package, the compiler can emit reflection-free registration helpers directly into your app assembly.
+
+The generator currently produces these methods in `DiDecoration.Generated.DecorationRegistrationExtensions`:
+
+- `RegisterServicesGenerated(...)`
+- `RegisterHostedServicesGenerated(...)`
+- `RegisterHttpClientsGenerated(...)`
+- `RegisterOptionsGenerated(...)`
+- `RegisterDecoratorsGenerated(...)`
+
+Use them with the same `IServiceCollection` and `IConfiguration` objects you already pass to the runtime API. Runtime scanning in `DiDecoration.Extensions.ServiceCollectionExtensions` remains the default fallback when you do not reference the generator package, or when you prefer dynamic assembly scanning.
+
+```csharp
+using DiDecoration.Generated;
+
+services.RegisterDecoratorsGenerated(configuration);
+```
+
 ## Advanced examples
 
 ### 1) Register a focused slice of an assembly
@@ -131,6 +151,7 @@ DecorationDiagnostics.Validate(typeof(MyService).Assembly);
 - HTTP handler types must inherit from `DelegatingHandler`.
 - If you scan internal types, set `DecorationScanOptions.IncludeInternalTypes = true`.
 - If you use the aggregate registration helper, remember that `RegisterDecorators(...)` will run services, hosted services, HTTP clients, and options in one pass.
+- If you reference `DiDecoration.Generators`, prefer the generated helpers for startup performance; keep the runtime `RegisterDecorators(...)` path when you need reflection-based scanning or a fallback for dynamic assemblies.
 - If a type is intentionally excluded by namespace or predicate filters, it will not be registered even if it has valid attributes.
 
 ## Analyzer support

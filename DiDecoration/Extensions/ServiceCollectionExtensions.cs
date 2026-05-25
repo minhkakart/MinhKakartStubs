@@ -13,6 +13,9 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Registers all decoration-based components from the supplied assembly using a single call.
+    /// When the separate source generator package is referenced, prefer the generated helpers in
+    /// <c>DiDecoration.Generated.DecorationRegistrationExtensions</c> for reflection-free startup;
+    /// this method remains the runtime-scanning fallback.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     /// <param name="configuration">Optional configuration root used for option binding.</param>

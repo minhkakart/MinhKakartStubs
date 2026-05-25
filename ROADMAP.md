@@ -61,6 +61,9 @@
 
 ### Work items
 - Add source generator support
+  - separate `DiDecoration.Generators` package
+  - emit reflection-free registration helpers into consumer apps
+  - keep runtime scanning as the default fallback path
 - Precompute registration metadata
 - Reduce runtime scanning work
 

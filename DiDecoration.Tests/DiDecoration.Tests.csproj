@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DiDecoration\DiDecoration.csproj" />
     <ProjectReference Include="..\DiDecoration.Analyzers\DiDecoration.Analyzers.csproj" />
+    <ProjectReference Include="..\DiDecoration.Generators\DiDecoration.Generators.csproj" />
   </ItemGroup>
 
 </Project>
