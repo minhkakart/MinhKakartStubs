@@ -21,6 +21,52 @@ services.RegisterDecorators(configuration, typeof(MyService).Assembly, new Decor
 });
 ```
 
+## Advanced examples
+
+### 1) Register a focused slice of an assembly
+
+```csharp
+services.RegisterDecorators(
+    configuration,
+    typeof(MyFeatureMarker).Assembly,
+    new DecorationScanOptions
+    {
+        NamespacePrefix = "MyApp.Features.Billing",
+        IncludeInternalTypes = true,
+        Predicate = type => type.Name.EndsWith("Service", StringComparison.Ordinal)
+    });
+```
+
+### 2) Keep registration order predictable
+
+When a hosted service resolves another registered service type, register the dependency in the same scan set and keep both calls in the startup pipeline:
+
+```csharp
+services
+    .RegisterServices(typeof(WorkerDependencies).Assembly)
+    .RegisterHostedServices(typeof(WorkerDependencies).Assembly);
+```
+
+### 3) Use diagnostics before registering
+
+```csharp
+var diagnostics = DecorationDiagnostics.Analyze(typeof(MyFeatureMarker).Assembly);
+
+if (diagnostics.Any(item => item.Severity == DecorationDiagnosticSeverity.Error))
+{
+    throw new InvalidOperationException("Fix attribute usage before continuing.");
+}
+```
+
+### 4) Use the analyzer for compile-time feedback
+
+If your solution references `DiDecoration.Analyzers`, invalid attribute usage shows up directly in the editor and build output. That is the fastest way to catch problems such as:
+
+- mapping a service to an interface it does not implement
+- assigning `BackgroundServiceAttribute` to a type that is not an `IHostedService`
+- giving `HttpClientServiceAttribute` an invalid URL or handler type
+- leaving an `[Option]` key empty
+
 ## Example attributes
 
 ```csharp
@@ -59,6 +105,7 @@ public sealed class MyOptions
 - `HttpClientServiceAttribute` supports client-name overrides, default request headers, and an explicit handler pipeline.
 - `RegisterOptions` binds each `[Option]` class from the configuration section named by its key.
 - `DecorationScanOptions` can filter by namespace prefix, predicate, and internal-type visibility.
+- Use `DecorationDiagnostics.Validate(...)` when you want to fail fast with a list of all discovered attribute issues.
 
 ## Diagnostics
 
@@ -83,6 +130,8 @@ DecorationDiagnostics.Validate(typeof(MyService).Assembly);
 - Typed HTTP clients need a constructor that can accept `HttpClient`.
 - HTTP handler types must inherit from `DelegatingHandler`.
 - If you scan internal types, set `DecorationScanOptions.IncludeInternalTypes = true`.
+- If you use the aggregate registration helper, remember that `RegisterDecorators(...)` will run services, hosted services, HTTP clients, and options in one pass.
+- If a type is intentionally excluded by namespace or predicate filters, it will not be registered even if it has valid attributes.
 
 ## Analyzer support
 
@@ -94,4 +143,24 @@ The solution now includes `DiDecoration.Analyzers`, which provides compile-time 
 - `DDI004` — invalid option attribute usage
 
 If you package this library for distribution, include the analyzer project as an analyzer asset so consumer projects get the same feedback in the IDE.
+
+## Troubleshooting checklist
+
+If registration behaves unexpectedly, check these common causes first:
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| Service not resolved | The type was filtered out by `DecorationScanOptions` | Relax the namespace/predicate filter or include the target namespace |
+| Hosted service fails at startup | A dependency service was not registered | Register the dependency in the same scan set or before `RegisterHostedServices(...)` |
+| Typed client throws on build | `BaseUrl` is invalid or the handler type is wrong | Use an absolute URI and ensure handlers inherit from `DelegatingHandler` |
+| Options are empty | The key does not match the configuration section | Confirm the `[Option("Key")]` value matches the config path |
+| Analyzer reports an attribute error | The attribute usage is invalid | Follow the diagnostic message; the analyzer IDs are listed above |
+
+When in doubt, run the diagnostics helper before registration:
+
+```csharp
+var diagnostics = DecorationDiagnostics.Validate(typeof(MyFeatureMarker).Assembly);
+```
+
+That gives you a single place to review all discovered issues before they turn into runtime surprises.
 
