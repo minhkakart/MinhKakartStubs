@@ -5,8 +5,7 @@ namespace DiDecoration.Attributes;
 /// The class must have a constructor that accepts an <see cref="HttpClient"/> parameter to be registered as an HTTP client service.
 /// The <see cref="HttpClientServiceAttribute"/> allows you to specify a base URL for the HTTP client, a timeout for requests, and any interceptors
 /// that should be applied to the HTTP client. Interceptors can be used to add custom logic before or after sending HTTP requests, such as logging,
-/// retry policies, or authentication. Duplicate typed-client registrations are ignored by
-/// <see cref="DiDecoration.Extensions.ServiceCollectionExtensions.RegisterHttpClients(Microsoft.Extensions.DependencyInjection.IServiceCollection, System.Reflection.Assembly?)"/>.
+/// retry policies, or authentication. Invalid base URLs and interceptor types are rejected when registration runs so configuration errors fail fast.
 /// </summary>
 /// <param name="baseUrl">
 /// An optional base URL for the HTTP client. If specified, this URL must be an absolute URI and will be used as the base address for all requests made
@@ -18,6 +17,15 @@ namespace DiDecoration.Attributes;
 /// <param name="interceptors">
 /// An optional array of interceptor types that should be applied to the HTTP client. Interceptors are classes that can implement custom logic to be executed before or after sending HTTP requests. This can include tasks such as logging request and response data, implementing retry policies, adding authentication headers, or modifying request parameters. Each interceptor type must implement the appropriate interface (e.g., <see cref="DelegatingHandler"/>) to be registered as an interceptor for the HTTP client.
 /// </param>
+/// <example>
+/// <code>
+/// [HttpClientService("https://api.example.com", 30, typeof(RetryHandler))]
+/// public sealed class CatalogClient
+/// {
+///     public CatalogClient(HttpClient httpClient) { }
+/// }
+/// </code>
+/// </example>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class HttpClientServiceAttribute(string? baseUrl = null, int timeoutSeconds = 30, params Type[] interceptors) : Attribute
 {

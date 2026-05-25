@@ -1,5 +1,4 @@
-﻿using DiDecoration.Extensions;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 
 namespace DiDecoration.Attributes;
 
@@ -7,7 +6,22 @@ namespace DiDecoration.Attributes;
 /// Indicates that a class is a service to be registered in the dependency injection container.
 /// </summary>
 /// <remarks>
-/// This attribute can be applied to classes to specify their service lifetime and optionally the service types they implement. The <see cref="ServiceCollectionExtensions.RegisterServices"/> method will scan for classes with this attribute and register them accordingly.
+/// <para>
+/// Apply this attribute to a class to control its lifetime and, optionally, the service interfaces it should be registered as.
+/// If no service types are supplied, the class is registered as itself.
+/// </para>
+/// <para>
+/// By default, the first registration for a service type wins. Set <see cref="Multiple"/> to <c>true</c> when you want all implementations
+/// to remain in the service collection.
+/// </para>
+/// <example>
+/// <code>
+/// [SingletonService(typeof(IMyService))]
+/// public sealed class MyService : IMyService { }
+///
+/// services.RegisterServices(typeof(MyService).Assembly);
+/// </code>
+/// </example>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
 public class ServiceAttribute : Attribute
