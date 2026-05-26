@@ -1,21 +1,12 @@
-using DiDecoration.Extensions;
+using DiDecoration.Generated;
 using DiDecoration.Sample;
-using DiDecoration.Utils;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration["SampleOptions:Greeting"] = "Configured greeting from the sample app";
-
-builder.Services.RegisterDecorators(
-    builder.Configuration,
-    typeof(WelcomeMessageService).Assembly,
-    new DecorationScanOptions
-    {
-        NamespacePrefix = typeof(WelcomeMessageService).Namespace,
-        IncludeInternalTypes = true
-    });
+builder.Services.RegisterDecoratorsGenerated(builder.Configuration);
 
 var app = builder.Build();
 

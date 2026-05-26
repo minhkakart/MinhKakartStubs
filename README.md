@@ -28,8 +28,12 @@ If you reference the separate `DiDecoration.Generators` project/package, the com
 To enable it in a project, reference the generator as an analyzer:
 
 ```xml
+<PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>obj\Generated</CompilerGeneratedFilesOutputPath>
+</PropertyGroup>
 <ItemGroup>
-  <ProjectReference Include="..\DiDecoration.Generators\DiDecoration.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\DiDecoration.Generators\DiDecoration.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 </ItemGroup>
 ```
 
@@ -68,12 +72,14 @@ app.Run();
 ## Sample app
 
 The solution includes a runnable ASP.NET Core sample in `DiDecoration.Sample`.
-It demonstrates a complete `RegisterDecorators(...)` startup path, including:
+It demonstrates a complete generated-source startup path, including:
 
 - service registration
 - hosted-service registration
 - typed HTTP clients
 - configuration-bound options
+
+The sample project references `DiDecoration.Generators` as an analyzer and writes emitted files to `DiDecoration.Sample/obj/Generated` so you can inspect the generated helper output during local development.
 
 Run it with:
 
