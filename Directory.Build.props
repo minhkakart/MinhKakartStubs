@@ -5,6 +5,7 @@
     <Authors>Minh Kakart</Authors>
     <Company>Minh Kakart</Company>
     <Product>DiDecoration</Product>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/minhkakart/MinhKakartStubs</RepositoryUrl>
     <PackageProjectUrl>https://github.com/minhkakart/MinhKakartStubs</PackageProjectUrl>
