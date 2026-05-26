@@ -121,6 +121,11 @@ Versioned release notes live under `docs/releases/`.
 - [`docs/releases/README.md`](docs/releases/README.md)
 - [`docs/releases/v1.1.0.md`](docs/releases/v1.1.0.md)
 
+## Documentation hub
+
+The main docs landing page lives at [`docs/README.md`](docs/README.md).
+For release workflows, see the step-by-step [NuGet publishing guide](docs/guides/nuget-publishing/README.md).
+
 ## Advanced examples
 
 ### 1) Register a focused slice of an assembly
