@@ -41,6 +41,29 @@ using DiDecoration.Generated;
 services.RegisterDecoratorsGenerated(configuration);
 ```
 
+## Sample app
+
+The solution includes a runnable ASP.NET Core sample in `DiDecoration.Sample`.
+It demonstrates a complete `RegisterDecorators(...)` startup path, including:
+
+- service registration
+- hosted-service registration
+- typed HTTP clients
+- configuration-bound options
+
+Run it with:
+
+```powershell
+dotnet run --project .\DiDecoration.Sample\DiDecoration.Sample.csproj
+```
+
+## Release notes
+
+Versioned release notes live under `docs/releases/`.
+
+- [`docs/releases/README.md`](docs/releases/README.md)
+- [`docs/releases/v1.1.0.md`](docs/releases/v1.1.0.md)
+
 ## Advanced examples
 
 ### 1) Register a focused slice of an assembly
