@@ -119,8 +119,10 @@ public sealed class MyOptions
 ## Registration notes
 
 - `RegisterServices` uses `TryAdd` for single registrations, so the first registration for a service type wins.
+- `ServiceAttribute.Key` enables keyed registrations when you need multiple implementations of the same service type.
 - Set `ServiceAttribute.Multiple = true` when you want additional implementations to remain in the collection.
 - `RegisterHostedServices` can resolve a hosted service directly or through another registered service type.
+- `BackgroundServiceAttribute.Key` lets a hosted service resolve a keyed registration, and hosted-service lifetime checks fail fast if a worker is not singleton.
 - `RegisterHttpClients` validates base URLs and handler types before the client registration is added.
 - `HttpClientServiceAttribute` supports client-name overrides, default request headers, and an explicit handler pipeline.
 - `RegisterOptions` binds each `[Option]` class from the configuration section named by its key.

@@ -41,6 +41,21 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void RegisterServices_registers_keyed_service_mappings()
+    {
+        var services = new ServiceCollection();
+
+        services.RegisterServices(typeof(KeyedService).Assembly);
+
+        using var provider = services.BuildServiceProvider();
+        var keyed = provider.GetRequiredKeyedService<IKeyedService>("primary");
+
+        Assert.Null(provider.GetService<IKeyedService>());
+        Assert.IsType<KeyedService>(keyed);
+        Assert.Same(keyed, provider.GetRequiredKeyedService<IKeyedService>("primary"));
+    }
+
+    [Fact]
     public void RegisterHostedServices_registers_direct_hosted_service()
     {
         var services = new ServiceCollection();
@@ -84,6 +99,40 @@ public sealed class ServiceCollectionExtensionsTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => services.RegisterHostedServices(assembly));
         Assert.Contains("must be an interface implemented by the hosted service", exception.Message);
+    }
+
+    [Fact]
+    public void RegisterHostedServices_throws_for_non_singleton_lifetime_before_build()
+    {
+        var assembly = CreateDynamicAssembly(
+            "InvalidHostedLifetime",
+            typeBuilder =>
+            {
+                typeBuilder.SetParent(typeof(HostedServiceBase));
+                typeBuilder.AddInterfaceImplementation(typeof(IInvalidLifetimeHostedService));
+                typeBuilder.SetCustomAttribute(CreateTransientServiceAttribute(typeof(IInvalidLifetimeHostedService)));
+                typeBuilder.SetCustomAttribute(CreateBackgroundServiceAttribute(typeof(IInvalidLifetimeHostedService)));
+            });
+
+        var services = new ServiceCollection();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => services.RegisterHostedServices(assembly));
+        Assert.Contains("hosted service", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RegisterHostedServices_resolves_keyed_hosted_service()
+    {
+        var services = new ServiceCollection();
+
+        services.RegisterServices(typeof(KeyedHostedWorker).Assembly);
+        services.RegisterHostedServices(typeof(KeyedHostedWorker).Assembly);
+
+        using var provider = services.BuildServiceProvider();
+        var hostedWorker = provider.GetServices<IHostedService>().OfType<KeyedHostedWorker>().Single();
+        var keyedWorker = provider.GetRequiredKeyedService<IKeyedHostedWorker>("worker-key");
+
+        Assert.Same(keyedWorker, hostedWorker);
     }
 
     [Fact]
@@ -165,6 +214,12 @@ public sealed class ServiceCollectionExtensionsTests
     private static CustomAttributeBuilder CreateSingletonServiceAttribute(params Type[] serviceTypes)
     {
         var ctor = typeof(SingletonServiceAttribute).GetConstructor([typeof(Type[])])!;
+        return new CustomAttributeBuilder(ctor, [serviceTypes]);
+    }
+
+    private static CustomAttributeBuilder CreateTransientServiceAttribute(params Type[] serviceTypes)
+    {
+        var ctor = typeof(TransientServiceAttribute).GetConstructor([typeof(Type[])])!;
         return new CustomAttributeBuilder(ctor, [serviceTypes]);
     }
 
@@ -252,6 +307,29 @@ public interface IInvalidServiceMapping
 }
 
 public interface IInvalidHostedService
+{
+}
+
+public interface IInvalidLifetimeHostedService
+{
+}
+
+public interface IKeyedService
+{
+}
+
+[SingletonService("primary", typeof(IKeyedService))]
+public sealed class KeyedService : IKeyedService
+{
+}
+
+public interface IKeyedHostedWorker
+{
+}
+
+[SingletonService("worker-key", typeof(IKeyedHostedWorker))]
+[BackgroundService(typeof(IKeyedHostedWorker), Key = "worker-key")]
+public sealed class KeyedHostedWorker : HostedServiceBase, IKeyedHostedWorker
 {
 }
 

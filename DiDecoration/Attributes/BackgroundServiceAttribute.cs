@@ -8,6 +8,7 @@ namespace DiDecoration.Attributes;
 /// If <see cref="ServiceType"/> is <c>null</c>, the hosted class is registered directly as
 /// <see cref="Microsoft.Extensions.Hosting.IHostedService"/>.
 /// If <see cref="ServiceType"/> is specified, it must be either the hosted class itself or an interface implemented by that class.
+/// Set <see cref="Key"/> when the hosted service should be resolved from a keyed registration.
 /// </para>
 /// <para>
 /// When the hosted instance is resolved through another service registration, the implementation must exist by the time the container is built.
@@ -26,6 +27,11 @@ public sealed class BackgroundServiceAttribute(Type? serviceType = null) : Attri
     /// Gets the optional service type used to resolve the hosted instance from dependency injection.
     /// </summary>
     public Type? ServiceType { get; init; } = serviceType;
+
+    /// <summary>
+    /// Gets an optional service key used to resolve a keyed hosted service or keyed service type.
+    /// </summary>
+    public object? Key { get; init; }
 }
 
 

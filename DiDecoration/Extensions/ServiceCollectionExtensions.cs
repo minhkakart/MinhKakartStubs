@@ -74,19 +74,31 @@ public static class ServiceCollectionExtensions
 
         foreach (var serviceDescriptor in serviceDescriptors)
         {
-            if (serviceDescriptor.Multiple)
+            if (serviceDescriptor.Key is not null)
             {
+                if (!serviceDescriptor.Multiple && services.Any(descriptor => descriptor.ServiceType == serviceDescriptor.Descriptor.ServiceType && Equals(descriptor.ServiceKey, serviceDescriptor.Key)))
+                {
+                    continue;
+                }
+
                 services.Add(serviceDescriptor.Descriptor);
             }
             else
             {
-                services.TryAdd(serviceDescriptor.Descriptor);
+                if (serviceDescriptor.Multiple)
+                {
+                    services.Add(serviceDescriptor.Descriptor);
+                }
+                else
+                {
+                    services.TryAdd(serviceDescriptor.Descriptor);
+                }
             }
         }
 
         return services;
 
-        IEnumerable<(ServiceDescriptor Descriptor, bool Multiple)> CreateServiceDescriptors(Type serviceClass, ServiceAttribute serviceAttribute)
+        IEnumerable<(ServiceDescriptor Descriptor, bool Multiple, object? Key)> CreateServiceDescriptors(Type serviceClass, ServiceAttribute serviceAttribute)
         {
             var serviceTypes = serviceAttribute.ServiceTypes is { Length: > 0 }
                 ? serviceAttribute.ServiceTypes
@@ -105,7 +117,7 @@ public static class ServiceCollectionExtensions
                         $"Cannot register {serviceClass.FullName} as {serviceType.FullName} because it does not implement the service type.");
                 }
 
-                yield return (new ServiceDescriptor(serviceType, serviceAttribute.Key, serviceClass, serviceAttribute.Lifetime), serviceAttribute.Multiple);
+                yield return (CreateServiceDescriptor(serviceType, serviceClass, serviceAttribute.Lifetime, serviceAttribute.Key), serviceAttribute.Multiple, serviceAttribute.Key);
             }
         }
     }
@@ -154,6 +166,15 @@ public static class ServiceCollectionExtensions
             var hostedServiceType = item.HostType;
             var backgroundServiceAttribute = item.Attribute!;
             var serviceType = backgroundServiceAttribute.ServiceType;
+            var key = backgroundServiceAttribute.Key;
+
+            var singletonServiceAttribute = hostedServiceType.GetCustomAttributes<ServiceAttribute>(true)
+                .FirstOrDefault(attribute => attribute.Lifetime != ServiceLifetime.Singleton);
+            if (singletonServiceAttribute is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot register hosted service {hostedServiceType.FullName} because it is marked with ServiceAttribute with lifetime {singletonServiceAttribute.Lifetime} instead of Singleton.");
+            }
 
             if (serviceType is not null && serviceType != hostedServiceType && (!serviceType.IsInterface || !serviceType.IsAssignableFrom(hostedServiceType)))
             {
@@ -163,33 +184,7 @@ public static class ServiceCollectionExtensions
 
             services.AddSingleton<IHostedService>(sp =>
             {
-                var singletonServiceAttribute = hostedServiceType.GetCustomAttributes<ServiceAttribute>(true)
-                    .FirstOrDefault(attribute => attribute.Lifetime != ServiceLifetime.Singleton);
-                if (singletonServiceAttribute is not null)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot register hosted service {hostedServiceType.FullName} because it is marked with ServiceAttribute with lifetime {singletonServiceAttribute.Lifetime} instead of Singleton.");
-                }
-
-                if (serviceType is null)
-                {
-                    return (IHostedService)(sp.GetService(hostedServiceType) ?? ActivatorUtilities.CreateInstance(sp, hostedServiceType));
-                }
-
-                var service = sp.GetService(serviceType);
-                if (service is null)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot register hosted service {hostedServiceType.FullName} because service type {serviceType.FullName} is not registered. Register the service before calling RegisterHostedServices.");
-                }
-
-                if (service is not IHostedService hostedService)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot register hosted service {hostedServiceType.FullName} because resolved service type {serviceType.FullName} does not implement {nameof(IHostedService)}.");
-                }
-
-                return hostedService;
+                return ResolveHostedService(sp, hostedServiceType, serviceType, key);
             });
         });
 
@@ -373,6 +368,59 @@ public static class ServiceCollectionExtensions
 
         return serviceType.IsAssignableFrom(serviceClass);
     }
+
+    private static ServiceDescriptor CreateServiceDescriptor(Type serviceType, Type implementationType, ServiceLifetime lifetime, object? key)
+        => key is null
+            ? ServiceDescriptor.Describe(serviceType, implementationType, lifetime)
+            : ServiceDescriptor.DescribeKeyed(serviceType, key, implementationType, lifetime);
+
+    private static IHostedService ResolveHostedService(IServiceProvider sp, Type hostedServiceType, Type? serviceType, object? key)
+    {
+        if (serviceType is null)
+        {
+            if (key is null)
+            {
+                return (IHostedService)(sp.GetService(hostedServiceType) ?? ActivatorUtilities.CreateInstance(sp, hostedServiceType));
+            }
+
+            var keyedHostedService = sp.GetKeyedService(hostedServiceType, key);
+            if (keyedHostedService is IHostedService keyedResolvedHostedService)
+            {
+                return keyedResolvedHostedService;
+            }
+
+            throw new InvalidOperationException(
+                $"Cannot register hosted service {hostedServiceType.FullName} because keyed service '{DescribeKey(key)}' is not registered. Register the keyed service before calling RegisterHostedServices.");
+        }
+
+        var service = key is null
+            ? sp.GetService(serviceType)
+            : sp.GetKeyedService(serviceType, key);
+
+        if (service is null)
+        {
+            var keyMessage = key is null ? string.Empty : $" with key '{DescribeKey(key)}'";
+            throw new InvalidOperationException(
+                $"Cannot register hosted service {hostedServiceType.FullName} because service type {serviceType.FullName}{keyMessage} is not registered. Register the service before calling RegisterHostedServices.");
+        }
+
+        if (service is not IHostedService serviceResolvedHostedService)
+        {
+            var keyMessage = key is null ? string.Empty : $" with key '{DescribeKey(key)}'";
+            throw new InvalidOperationException(
+                $"Cannot register hosted service {hostedServiceType.FullName} because resolved service type {serviceType.FullName}{keyMessage} does not implement {nameof(IHostedService)}.");
+        }
+
+        return serviceResolvedHostedService;
+    }
+
+    private static string DescribeKey(object? key)
+        => key switch
+        {
+            null => "<null>",
+            string stringKey => stringKey,
+            _ => key.ToString() ?? key.GetType().Name
+        };
 
     private static void ValidateHeaderDefinition(string header, Type httpClientType)
     {
