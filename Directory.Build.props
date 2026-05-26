@@ -1,0 +1,17 @@
+<Project>
+
+  <PropertyGroup>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <Authors>Minh Kakart</Authors>
+    <Company>Minh Kakart</Company>
+    <Product>DiDecoration</Product>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/minhkakart/MinhKakartStubs</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/minhkakart/MinhKakartStubs</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+
+
+</Project>
+

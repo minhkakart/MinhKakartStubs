@@ -53,6 +53,33 @@ using DiDecoration.Generated;
 builder.Services.RegisterDecoratorsGenerated(builder.Configuration);
 ```
 
+## Packaging and deployment
+
+The solution is structured so each shipable component can be packed independently:
+
+- `DiDecoration` — runtime helpers for service registration, hosted services, HTTP clients, and options binding
+- `DiDecoration.Analyzers` — compile-time diagnostics for invalid attribute usage
+- `DiDecoration.Generators` — source generator that emits reflection-free registration helpers
+
+The sample project in `DiDecoration.Sample` is reference-only and is not intended to be packed for consumers.
+
+### Suggested deployment flow
+
+1. Pack the runtime library and the analyzer/generator packages separately.
+2. Publish the analyzer and generator packages as build-time dependencies for consumers.
+3. Keep the runtime package available for reflection-based scanning and fallback scenarios.
+4. Link release notes from `docs/releases/` when you publish a new version.
+
+### Typical consumer setup
+
+```xml
+<ItemGroup>
+  <PackageReference Include="DiDecoration" Version="x.y.z" />
+  <PackageReference Include="DiDecoration.Analyzers" Version="x.y.z" PrivateAssets="all" />
+  <PackageReference Include="DiDecoration.Generators" Version="x.y.z" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+</ItemGroup>
+```
+
 ### Source-generation sample
 
 Use the generated helpers in any ASP.NET Core app after adding the analyzer reference shown above:
