@@ -6,6 +6,12 @@
     <Company>Minh Kakart</Company>
     <Product>DiDecoration</Product>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <MicrosoftNETTestSdkVersion>17.12.0</MicrosoftNETTestSdkVersion>
+    <MicrosoftExtensionsVersion>8.0.0</MicrosoftExtensionsVersion>
+    <XunitVersion>2.9.2</XunitVersion>
+    <XunitRunnerVisualStudioVersion>2.8.2</XunitRunnerVisualStudioVersion>
+    <MicrosoftCodeAnalysisCSharpVersion>4.11.0</MicrosoftCodeAnalysisCSharpVersion>
+    <MicrosoftCodeAnalysisAnalyzersVersion>3.11.0</MicrosoftCodeAnalysisAnalyzersVersion>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/minhkakart/MinhKakartStubs</RepositoryUrl>
     <PackageProjectUrl>https://github.com/minhkakart/MinhKakartStubs</PackageProjectUrl>

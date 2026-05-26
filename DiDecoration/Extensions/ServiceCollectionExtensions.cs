@@ -383,10 +383,18 @@ public static class ServiceCollectionExtensions
                 return (IHostedService)(sp.GetService(hostedServiceType) ?? ActivatorUtilities.CreateInstance(sp, hostedServiceType));
             }
 
-            var keyedHostedService = sp.GetKeyedService(hostedServiceType, key);
-            if (keyedHostedService is IHostedService keyedResolvedHostedService)
+            try
             {
-                return keyedResolvedHostedService;
+                var keyedHostedService = sp.GetRequiredKeyedService(hostedServiceType, key);
+                if (keyedHostedService is IHostedService keyedResolvedHostedService)
+                {
+                    return keyedResolvedHostedService;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot register hosted service {hostedServiceType.FullName} because keyed service '{DescribeKey(key)}' is not registered. Register the keyed service before calling RegisterHostedServices.");
             }
 
             throw new InvalidOperationException(
@@ -395,7 +403,7 @@ public static class ServiceCollectionExtensions
 
         var service = key is null
             ? sp.GetService(serviceType)
-            : sp.GetKeyedService(serviceType, key);
+            : TryGetKeyedService(sp, serviceType, key);
 
         if (service is null)
         {
@@ -421,6 +429,18 @@ public static class ServiceCollectionExtensions
             string stringKey => stringKey,
             _ => key.ToString() ?? key.GetType().Name
         };
+
+    private static object? TryGetKeyedService(IServiceProvider sp, Type serviceType, object? key)
+    {
+        try
+        {
+            return sp.GetRequiredKeyedService(serviceType, key);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
 
     private static void ValidateHeaderDefinition(string header, Type httpClientType)
     {
