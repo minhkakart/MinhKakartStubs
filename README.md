@@ -25,6 +25,14 @@ services.RegisterDecorators(configuration, typeof(MyService).Assembly, new Decor
 
 If you reference the separate `DiDecoration.Generators` project/package, the compiler can emit reflection-free registration helpers directly into your app assembly.
 
+To enable it in a project, reference the generator as an analyzer:
+
+```xml
+<ItemGroup>
+  <ProjectReference Include="..\DiDecoration.Generators\DiDecoration.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+</ItemGroup>
+```
+
 The generator currently produces these methods in `DiDecoration.Generated.DecorationRegistrationExtensions`:
 
 - `RegisterServicesGenerated(...)`
@@ -38,7 +46,23 @@ Use them with the same `IServiceCollection` and `IConfiguration` objects you alr
 ```csharp
 using DiDecoration.Generated;
 
-services.RegisterDecoratorsGenerated(configuration);
+builder.Services.RegisterDecoratorsGenerated(builder.Configuration);
+```
+
+### Source-generation sample
+
+Use the generated helpers in any ASP.NET Core app after adding the analyzer reference shown above:
+
+```csharp
+using DiDecoration.Generated;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.RegisterDecoratorsGenerated(builder.Configuration);
+
+var app = builder.Build();
+app.MapGet("/sample", () => "Generated helpers are wired up.");
+app.Run();
 ```
 
 ## Sample app
